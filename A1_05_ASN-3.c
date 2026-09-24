@@ -20,6 +20,7 @@
 #define MAX_PROCESSES 200
 #define MAX_GANTT 5000
 #define MAX_QUEUE 10000
+#define MAX_RESULTS 50
 
 typedef struct {
     char pid[10];
@@ -49,7 +50,7 @@ typedef struct {
 } Result;
 
 // Global variables to store comparison results
-Result results[6]; 
+Result results[MAX_RESULTS]; 
 int num_results = 0;
 
 // Read processes from CSV
@@ -197,12 +198,22 @@ void print_metrics(Process p[], int n, const char* algo_name) {
     printf("Average Response Time:   %.2f\n\n", avg_rt);
     
     // Save to results array
-    strcpy(results[num_results].algo_name, algo_name);
-    results[num_results].avg_tat = avg_tat;
-    results[num_results].avg_wt = avg_wt;
-    results[num_results].avg_rt = avg_rt;
-    results[num_results].has_run = true;
-    num_results++;
+    int slot = -1;
+    for (int i = 0; i < num_results; i++) {
+        if (strcmp(results[i].algo_name, algo_name) == 0) {
+            slot = i;
+            break;
+        }
+    }
+    if (slot == -1) {
+        if (num_results == MAX_RESULTS) return;
+        slot = num_results++;
+    }
+    strcpy(results[slot].algo_name, algo_name);
+    results[slot].avg_tat = avg_tat;
+    results[slot].avg_wt = avg_wt;
+    results[slot].avg_rt = avg_rt;
+    results[slot].has_run = true;
 }
 
 // Custom sort by arrival time
@@ -415,7 +426,7 @@ void psrtf(Process p[], int n) {
     print_metrics(p, n, "PSRTF");
 }
 
-void mlfq(Process p[], int n) {
+void mlfq(Process p[], int n, int quantum1, int quantum2) {
     int time = 0, completed = 0;
     GanttEntry gantt[MAX_GANTT];
     int g_size = 0;
@@ -436,11 +447,11 @@ void mlfq(Process p[], int n) {
             int idx = q1[f1++];
             if (p[idx].start_time == -1) p[idx].start_time = time;
             
-            int exec_time = (p[idx].rt < 2) ? p[idx].rt : 2;
+            int exec_time = (p[idx].rt < quantum1) ? p[idx].rt : quantum1;
             add_to_gantt(gantt, &g_size, p[idx].pid, time, time + exec_time);
             time += exec_time;
             p[idx].rt -= exec_time;
-            
+
             for (int i = 0; i < n; i++) {
                 if (p[i].at <= time && !in_system[i] && p[i].rt > 0) {
                     q1[r1++] = i;
@@ -461,7 +472,7 @@ void mlfq(Process p[], int n) {
             
             int ticks = 0;
             bool preempted = false;
-            while (ticks < 4 && p[idx].rt > 0) {
+            while (ticks < quantum2 && p[idx].rt > 0) {
                 add_to_gantt(gantt, &g_size, p[idx].pid, time, time + 1);
                 time++;
                 p[idx].rt--;
@@ -523,7 +534,9 @@ void mlfq(Process p[], int n) {
     
     calculate_metrics(p, n);
     print_gantt_chart(gantt, g_size);
-    print_metrics(p, n, "MLFQ");
+    char name[50];
+    sprintf(name, "MLFQ (Q1=%d, Q2=%d)", quantum1, quantum2);
+    print_metrics(p, n, name);
 }
 
 void show_comparison() {
@@ -601,10 +614,20 @@ int main() {
                 printf("\nExecuting PSRTF...\n");
                 psrtf(active, n);
                 break;
-            case 6:
-                printf("\nExecuting MLFQ (Q1=RR2, Q2=RR4, Q3=FCFS)...\n");
-                mlfq(active, n);
+            case 6: {
+                int q1, q2;
+                printf("Enter Time Quantum for MLFQ Queue 1 (RR): ");
+                scanf("%d", &q1);
+                printf("Enter Time Quantum for MLFQ Queue 2 (RR): ");
+                scanf("%d", &q2);
+                if (q1 > 0 && q2 > 0) {
+                    printf("\nExecuting MLFQ (Q1=RR%d, Q2=RR%d, Q3=FCFS)...\n", q1, q2);
+                    mlfq(active, n, q1, q2);
+                } else {
+                    printf("Invalid Time Quantum.\n");
+                }
                 break;
+            }
             case 7:
                 show_comparison();
                 break;
