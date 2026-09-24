@@ -16,7 +16,15 @@ int findSum(int start, int end)
 int main()
 {
     pid_t child, grandchild, greatgrandchild;
+    int fd[2];
     int sum;
+    int total = 0;
+
+    if (pipe(fd) < 0)
+    {
+        perror("pipe failed");
+        exit(1);
+    }
 
     // Parent Process
     printf("Parent Process\n");
@@ -29,6 +37,9 @@ int main()
 
     sum = findSum(1, 10);
     printf("\nSum  : %d\n\n", sum);
+
+    // Parent sends its sum
+    write(fd[1], &sum, sizeof(sum));
 
     child = fork();
 
@@ -52,6 +63,8 @@ int main()
         sum = findSum(11, 20);
         printf("\nSum  : %d\n\n", sum);
 
+        write(fd[1], &sum, sizeof(sum));
+
         grandchild = fork();
 
         if (grandchild < 0)
@@ -73,6 +86,8 @@ int main()
 
             sum = findSum(21, 30);
             printf("\nSum  : %d\n\n", sum);
+
+            write(fd[1], &sum, sizeof(sum));
 
             greatgrandchild = fork();
 
@@ -96,6 +111,8 @@ int main()
                 sum = findSum(31, 40);
                 printf("\nSum  : %d\n\n", sum);
 
+                write(fd[1], &sum, sizeof(sum));
+
                 exit(0);
             }
             else
@@ -114,11 +131,17 @@ int main()
     {
         waitpid(child, NULL, 0);
 
-        printf("Final Total Sum = %d\n",
-               findSum(1, 10) +
-               findSum(11, 20) +
-               findSum(21, 30) +
-               findSum(31, 40));
+        close(fd[1]);
+
+        for (int i = 0; i < 4; i++)
+        {
+            read(fd[0], &sum, sizeof(sum));
+            total += sum;
+        }
+
+        close(fd[0]);
+
+        printf("Final Total Sum = %d\n", total);
     }
 
     return 0;
