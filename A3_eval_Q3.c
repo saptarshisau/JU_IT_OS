@@ -3,46 +3,72 @@
 #include <unistd.h>
 #include <sys/wait.h>
 
-int main() {
+int main()
+{
     pid_t pid;
-    int i, j, sum = 0, total = 0;
+    int i, j, sum;
     int start, end;
+    int total=0;
+    int fd[2];
 
-    for (i = 0; i < 4; i++) {
-        start = i * 10 + 1;
-        end = (i + 1) * 10;
-        sum = 0;
+    if (pipe(fd) < 0)
+    {
+        perror("pipe failed");
+        exit(1);
+    }
 
-        for (j = start; j <= end; j++) {
-            sum += j;
-        }
-
-        printf("PID: %d | PPID: %d | Range: %d-%d | Sum: %d\n", getpid(), getppid(), start, end, sum);
-
-        if (i == 3) {
-            exit(0); // Great-grandchild stops here
-        }
-
+    for (i = 0; i < 5; i++)
+    {
         pid = fork();
 
-        if (pid < 0) {
+        if (pid < 0)
+        {
             perror("fork failed");
             exit(1);
         }
 
-        if (pid > 0) {
-            // Wait for child generation to finish
-            wait(NULL);
+        if (pid == 0)
+        {
+            // Child process
 
-            if (i == 0) {
-                // Parent prints total sum (1 to 40)
-                for (j = 1; j <= 40; j++) total += j;
-                printf("Total Sum (1-40): %d\n", total);
+            start = i * 10 + 1;
+            end = (i + 1) * 10;
+
+            sum = 0;
+
+            printf("\nCHILD %d\n", i + 1);
+            printf("PID  : %d\n", getpid());
+            printf("PPID : %d\n", getppid());
+
+            printf("Numbers: ");
+
+            for (j = start; j <= end; j++)
+            {
+                printf("%d ", j);
+                sum += j;
             }
+
+            printf("\nSum = %d\n", sum);
+
+            // Child has its own copy of 'total', so send the sum to the parent
+            close(fd[0]);
+            write(fd[1], &sum, sizeof(sum));
+            close(fd[1]);
+
             exit(0);
+        }else{
+            wait(NULL);
+            read(fd[0], &sum, sizeof(sum));
+            total += sum;
         }
-        // Child (pid == 0) continues to the next loop iteration
     }
+
+    close(fd[0]);
+    close(fd[1]);
+
+    printf("\nParent Process\n");
+    printf("PID : %d\n", getpid());
+    printf("Total Sum = %d\n", total);
 
     return 0;
 }
